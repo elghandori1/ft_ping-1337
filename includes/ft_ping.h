@@ -43,5 +43,6 @@ void    print_usage(void);
 void    perr_exit(const char *msg);
 void    perr_errno(const char *msg);
 long    time_diff_ms(struct timeval *start, struct timeval *end);
+int     DNS_LookUp(const char *target, struct sockaddr_in *addr, char *ipstr, size_t ipstr_len);
 
 #endif

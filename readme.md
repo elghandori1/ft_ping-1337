@@ -1,6 +1,5 @@
 # FT Ping Debian
 
-
 This project provides a Dockerized version of a basic ping utility built on top of a Debian-based image for the test.
 
 ## Build And Run the Docker Image

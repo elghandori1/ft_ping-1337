@@ -46,8 +46,7 @@ int parse_args(int argc, char **argv, t_args *args)
 
     if (argc < 2)
     {
-            fprintf(stderr, "ft_ping: usage error: Destination address required\n");
-     
+        fprintf(stderr, "ft_ping: missing host operand\n");
         return 1;
     }
 
@@ -56,6 +55,36 @@ int parse_args(int argc, char **argv, t_args *args)
 
     while (i < argc)
     {
+        if (strcmp(argv[i], "--") == 0)
+        {
+            i++;
+            if (i >= argc)
+            {
+                fprintf(stderr, "ft_ping: missing host operand\n");
+                return 1;
+            }
+            if (target_set)
+            {
+                fprintf(stderr, "ft_ping: unexpected argument\n");
+                return 1;
+            }
+            args->target = argv[i];
+            target_set = true;
+            i++;
+            continue;
+        }
+        if (strcmp(argv[i], "-") == 0)
+        {
+            if (target_set)
+            {
+                fprintf(stderr, "ft_ping: unexpected argument\n");
+                return 1;
+            }
+            args->target = argv[i];
+            target_set = true;
+            i++;
+            continue;
+        }
         if (argv[i][0] != '-')
         {
             if (target_set)
@@ -82,7 +111,7 @@ int parse_args(int argc, char **argv, t_args *args)
         }
         else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0)
         {
-            printf("ft_ping, from iputils-s20190709\n");
+            printf("ft_ping (GNU inetutils) 2.0\n");
             exit(0);
         }
         else if (strcmp(argv[i], "-c") == 0)
@@ -112,7 +141,7 @@ int parse_args(int argc, char **argv, t_args *args)
             int val;
             if (!parse_positive_int(argv[i + 1], &val) || val <= 0)
                 return (fprintf(stderr, "ft_ping: bad ttl value\n"), 1);
-            if (val < 1 || val > 255)
+            if (val > 255)
             {
                 fprintf(stderr, "ft_ping: ttl out of range\n");
                 return 1;
