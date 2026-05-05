@@ -54,7 +54,8 @@ static void print_icmp_error_verbose(struct icmphdr *icmp, struct in_addr *from,
 
 static int recv_one_icmp(int sock, struct sockaddr_in *peer, t_args *args,
     uint16_t want_id, uint16_t want_seq, struct timeval *sent_at,
-    int *got_reply, int *got_related_err, double *rtt_ms, int *reply_ttl)
+    int *got_reply, int *got_related_err, double *rtt_ms, int *reply_ttl,
+    struct sockaddr_in *from_out)
 {
     unsigned char buf[RECV_BUF_SIZE];
     ssize_t n;
@@ -98,6 +99,8 @@ static int recv_one_icmp(int sock, struct sockaddr_in *peer, t_args *args,
         if (*rtt_ms < 0.0)
             *rtt_ms = 0.0;
         *reply_ttl = (int)ip->ttl;
+        if (from_out)
+            *from_out = from;
         *got_reply = 1;
         return 1;
     }
@@ -153,18 +156,21 @@ static void print_stats(const char *target, unsigned long tx, unsigned long rx,
         min_ms, avg, max_ms, stddev);
 }
 
-static void print_reply(t_args *args, char *ipstr, int pkt_len, uint16_t seq,
-    int reply_ttl, double rtt)
+static void print_reply(t_args *args, int pkt_len, uint16_t seq,
+    int reply_ttl, double rtt, const char *target_display,
+    const char *reply_ip)
 {
     if (args->numeric)
+    {
         printf("%d bytes from %s: icmp_seq=%u ttl=%d time=%.3f ms\n",
-            pkt_len, ipstr, (unsigned int)seq, reply_ttl, rtt);
-    else if (strcmp(args->target, ipstr) != 0)
-        printf("%d bytes from %s : icmp_seq=%u ttl=%d time=%.3f ms\n",
-            pkt_len, args->target, (unsigned int)seq, reply_ttl, rtt);
+               pkt_len, reply_ip, (unsigned int)seq, reply_ttl, rtt);
+    }
     else
-        printf("%d bytes from %s: icmp_seq=%u ttl=%d time=%.3f ms\n",
-            pkt_len, ipstr, (unsigned int)seq, reply_ttl, rtt);
+    {
+        printf("%d bytes from %s (%s): icmp_seq=%u ttl=%d time=%.3f ms\n",
+               pkt_len, target_display, reply_ip, (unsigned int)seq,
+               reply_ttl, rtt);
+    }
 }
 
 void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
@@ -186,6 +192,7 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
     struct sigaction sa;
     struct sigaction old_int;
     struct sigaction old_term;
+    char current_ip[INET_ADDRSTRLEN];
 
     pkt_len = sizeof(struct icmphdr) + (size_t)args->size;
     pkt = (unsigned char *)malloc(pkt_len);
@@ -231,6 +238,15 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
     }
     gettimeofday(&t_start, NULL);
     id = (uint16_t)(getpid() & 0xffff);
+    if (args->verbose)
+    {
+        printf("PING %s (%s): %d data bytes, id 0x%04x = %u\n",
+               args->target, ipstr, args->size, (unsigned int)id, (unsigned int)id);
+    }
+    else
+    {
+        printf("PING %s (%s): %d data bytes\n", args->target, ipstr, args->size);
+    }
     seq = 0;
     tx = 0;
     rx = 0;
@@ -240,6 +256,7 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
     sum_sq_ms = 0.0;
     while (!g_sigint)
     {
+        struct sockaddr_in reply_from;
         struct timeval sent_at;
         struct timeval now_chk;
         fd_set rfds;
@@ -321,7 +338,8 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
                 continue;
             }
             if (recv_one_icmp(sock, addr, args, id, seq, &sent_at,
-                    &got_reply, &got_related_err, &rtt, &reply_ttl) < 0)
+                    &got_reply, &got_related_err, &rtt, &reply_ttl,
+                    &reply_from) < 0)
             {
                 if (errno == EINTR && g_sigint)
                     break;
@@ -336,7 +354,11 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
                     max_ms = rtt;
                 sum_ms += rtt;
                 sum_sq_ms += rtt * rtt;
-                print_reply(args, ipstr, (int)pkt_len, seq, reply_ttl, rtt);
+                if (!inet_ntop(AF_INET, &reply_from.sin_addr, current_ip,
+                        sizeof(current_ip)))
+                    strcpy(current_ip, "?");
+                print_reply(args, (int)pkt_len, seq, reply_ttl, rtt,
+                    args->target, current_ip);
                 break;
             }
             if (got_related_err)
