@@ -117,23 +117,16 @@ static int recv_one_icmp(int sock, struct sockaddr_in *peer, t_args *args,
 }
 
 static void print_stats(const char *target, unsigned long tx, unsigned long rx,
-    double min_ms, double max_ms, double sum_ms, double sum_sq_ms,
-    struct timeval *start, struct timeval *end)
+    double min_ms, double max_ms, double sum_ms, double sum_sq_ms)
 {
     double avg;
     double stddev;
     double loss;
-    long total_ms;
-
-    total_ms = time_diff_ms(start, end);
-    if (total_ms < 0)
-        total_ms = 0;
 
     printf("\n--- %s ping statistics ---\n", target);
     if (tx == 0)
     {
-        printf("0 packets transmitted, 0 received, 100%% packet loss, time %ldms\n",
-            total_ms);
+        printf("0 packets transmitted, 0 packets received, 100%% packet loss\n");
         return;
     }
     loss = 100.0 * (double)(tx - rx) / (double)tx;
@@ -141,8 +134,8 @@ static void print_stats(const char *target, unsigned long tx, unsigned long rx,
         loss = 0.0;
     if (loss > 100.0)
         loss = 100.0;
-    printf("%lu packets transmitted, %lu received, %.0f%% packet loss, time %ldms\n",
-        tx, rx, loss, total_ms);
+    printf("%lu packets transmitted, %lu packets received, %.0f%% packet loss\n",
+        tx, rx, loss);
     if (rx == 0)
         return;
     avg = sum_ms / (double)rx;
@@ -157,8 +150,7 @@ static void print_stats(const char *target, unsigned long tx, unsigned long rx,
 }
 
 static void print_reply(t_args *args, int pkt_len, uint16_t seq,
-    int reply_ttl, double rtt, const char *target_display,
-    const char *reply_ip)
+    int reply_ttl, double rtt, const char *reply_ip)
 {
     if (args->numeric)
     {
@@ -167,13 +159,13 @@ static void print_reply(t_args *args, int pkt_len, uint16_t seq,
     }
     else
     {
-        printf("%d bytes from %s (%s): icmp_seq=%u ttl=%d time=%.3f ms\n",
-               pkt_len, target_display, reply_ip, (unsigned int)seq,
+        printf("%d bytes from %s: icmp_seq=%u ttl=%d time=%.3f ms\n",
+               pkt_len, reply_ip, (unsigned int)seq,
                reply_ttl, rtt);
     }
 }
 
-void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
+int run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
 {
     int sock;
     unsigned char *pkt;
@@ -188,7 +180,6 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
     double sum_ms;
     double sum_sq_ms;
     struct timeval t_start;
-    struct timeval t_end;
     struct sigaction sa;
     struct sigaction old_int;
     struct sigaction old_term;
@@ -199,7 +190,7 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
     if (!pkt)
     {
         perr_errno("malloc");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
     g_sigint = 0;
     memset(&sa, 0, sizeof(sa));
@@ -209,13 +200,15 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
     if (sigaction(SIGINT, &sa, &old_int) == -1)
     {
         perr_errno("sigaction");
-        exit(EXIT_FAILURE);
+        free(pkt);
+        return EXIT_FAILURE;
     }
     if (sigaction(SIGTERM, &sa, &old_term) == -1)
     {
         perr_errno("sigaction");
         sigaction(SIGINT, &old_int, NULL);
-        exit(EXIT_FAILURE);
+        free(pkt);
+        return EXIT_FAILURE;
     }
     sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sock < 0)
@@ -226,7 +219,8 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
             perr_errno("socket");
         sigaction(SIGTERM, &old_term, NULL);
         sigaction(SIGINT, &old_int, NULL);
-        exit(EXIT_FAILURE);
+        free(pkt);
+        return EXIT_FAILURE;
     }
     if (setsockopt(sock, IPPROTO_IP, IP_TTL, &args->ttl, sizeof(args->ttl)) == -1)
     {
@@ -234,7 +228,8 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
         close(sock);
         sigaction(SIGTERM, &old_term, NULL);
         sigaction(SIGINT, &old_int, NULL);
-        exit(EXIT_FAILURE);
+        free(pkt);
+        return EXIT_FAILURE;
     }
     gettimeofday(&t_start, NULL);
     id = (uint16_t)(getpid() & 0xffff);
@@ -272,7 +267,7 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
         if (args->deadline_sec > 0)
         {
             gettimeofday(&now_chk, NULL);
-            if (time_diff_ms(&t_start, &now_chk) >= args->deadline_sec * 1000L)
+            if (time_diff_ms(&t_start, &now_chk) > args->deadline_sec * 1000L)
                 break;
         }
         if (args->count > 0 && (int)tx >= args->count)
@@ -294,6 +289,12 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
         }
         tx++;
         gettimeofday(&sent_at, NULL);
+        if (args->deadline_sec > 0
+            && time_diff_ms(&t_start, &sent_at) >= args->deadline_sec * 1000L)
+        {
+            deadline_hit = 1;
+            break;
+        }
         wait_ms = args->timeout_ms;
         got_reply = 0;
         got_related_err = 0;
@@ -307,7 +308,7 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
             if (args->deadline_sec > 0)
             {
                 gettimeofday(&now_chk, NULL);
-                if (time_diff_ms(&t_start, &now_chk) >= args->deadline_sec * 1000L)
+                if (time_diff_ms(&t_start, &now_chk) > args->deadline_sec * 1000L)
                 {
                     deadline_hit = 1;
                     break;
@@ -357,8 +358,7 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
                 if (!inet_ntop(AF_INET, &reply_from.sin_addr, current_ip,
                         sizeof(current_ip)))
                     strcpy(current_ip, "?");
-                print_reply(args, (int)pkt_len, seq, reply_ttl, rtt,
-                    args->target, current_ip);
+                print_reply(args, (int)pkt_len, seq, reply_ttl, rtt, current_ip);
                 break;
             }
             if (got_related_err)
@@ -368,8 +368,6 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
             break;
         if (deadline_hit)
             break;
-        if (!got_reply && !got_related_err)
-            printf("Request timeout for icmp_seq %u\n", (unsigned int)seq);
         if (args->count > 0 && (int)tx >= args->count)
             break;
         seq++;
@@ -381,11 +379,12 @@ void run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
         min_ms = 0.0;
         max_ms = 0.0;
     }
-    gettimeofday(&t_end, NULL);
-    print_stats(args->target, tx, rx, min_ms, max_ms, sum_ms, sum_sq_ms,
-        &t_start, &t_end);
+    print_stats(args->target, tx, rx, min_ms, max_ms, sum_ms, sum_sq_ms);
     close(sock);
     free(pkt);
     sigaction(SIGTERM, &old_term, NULL);
     sigaction(SIGINT, &old_int, NULL);
+    if (tx > 0 && rx == 0)
+        return 1;
+    return 0;
 }

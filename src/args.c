@@ -121,7 +121,7 @@ int parse_args(int argc, char **argv, t_args *args)
 
             if (i + 1 >= argc)
                 return (fprintf(stderr, "ft_ping: option requires an argument -- 'c'\n"), 1);
-            if (!parse_positive_int(argv[i + 1], &val) || val <= 0)
+            if (!parse_positive_int(argv[i + 1], &val))
                 return (fprintf(stderr, "ft_ping: bad number of packets to transmit\n"), 1);
             args->count = val;
             i += 2;

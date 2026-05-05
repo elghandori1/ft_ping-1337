@@ -41,6 +41,6 @@ long    time_diff_ms(struct timeval *start, struct timeval *end);
 int     DNS_LookUp(const char *target, struct sockaddr_in *addr, char *ipstr,
             size_t ipstr_len);
 
-void    run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr);
+int     run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr);
 
 #endif

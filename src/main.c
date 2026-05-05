@@ -10,6 +10,5 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     if (DNS_LookUp(args.target, &addr, ipstr, sizeof(ipstr)) != 0)
         return EXIT_FAILURE;
-    run_ping(&args, &addr, ipstr);
-    return EXIT_SUCCESS;
+    return run_ping(&args, &addr, ipstr);
 }
