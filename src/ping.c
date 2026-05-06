@@ -85,6 +85,17 @@ static int recv_one_icmp(int sock, struct sockaddr_in *peer, t_args *args,
     icmp = (struct icmphdr *)(buf + ip_len);
     if (icmp->type == ICMP_ECHOREPLY)
     {
+        uint16_t recv_checksum;
+        uint16_t calc_checksum;
+        size_t icmp_len;
+
+        recv_checksum = icmp->checksum;
+        icmp->checksum = 0;
+        icmp_len = (size_t)n - ip_len;
+        calc_checksum = icmp_checksum(icmp, icmp_len);
+        icmp->checksum = recv_checksum;
+        if (calc_checksum != recv_checksum)
+            return 0;
         rid = ntohs(icmp->un.echo.id);
         rseq = ntohs(icmp->un.echo.sequence);
         if (rid != want_id)
@@ -106,6 +117,17 @@ static int recv_one_icmp(int sock, struct sockaddr_in *peer, t_args *args,
     }
     if (icmp->type == ICMP_TIME_EXCEEDED || icmp->type == ICMP_DEST_UNREACH)
     {
+        uint16_t recv_checksum;
+        uint16_t calc_checksum;
+        size_t icmp_len;
+
+        recv_checksum = icmp->checksum;
+        icmp->checksum = 0;
+        icmp_len = (size_t)n - ip_len;
+        calc_checksum = icmp_checksum(icmp, icmp_len);
+        icmp->checksum = recv_checksum;
+        if (calc_checksum != recv_checksum)
+            return 0;
         if (args->verbose)
         {
             print_icmp_error_verbose(icmp, &from.sin_addr, want_seq);
@@ -355,8 +377,7 @@ int run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr)
                     max_ms = rtt;
                 sum_ms += rtt;
                 sum_sq_ms += rtt * rtt;
-                if (!inet_ntop(AF_INET, &reply_from.sin_addr, current_ip,
-                        sizeof(current_ip)))
+                if (!inet_ntop(AF_INET, &reply_from.sin_addr, current_ip, sizeof(current_ip)))
                     strcpy(current_ip, "?");
                 print_reply(args, (int)pkt_len, seq, reply_ttl, rtt, current_ip);
                 break;
