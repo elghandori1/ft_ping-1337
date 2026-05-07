@@ -5,6 +5,7 @@
 # include <stdlib.h>
 # include <string.h>
 # include <unistd.h>
+# include <stdbool.h>
 # include <errno.h>
 # include <signal.h>
 # include <sys/time.h>
@@ -14,7 +15,7 @@
 # include <netinet/ip_icmp.h>
 # include <arpa/inet.h>
 # include <netdb.h>
-#include <math.h>
+# include <limits.h>
 
 # define DEFAULT_TTL        64
 # define DEFAULT_TIMEOUT_MS 1000
@@ -24,6 +25,12 @@ typedef struct s_args
 {
     char    *target;
     int     verbose;
+    int     count;
+    int     ttl;
+    int     size;
+    int     timeout_ms;
+    int     deadline_sec;
+    bool    numeric;
 } t_args;
 
 int     parse_args(int argc, char **argv, t_args *args);
@@ -34,6 +41,6 @@ long    time_diff_ms(struct timeval *start, struct timeval *end);
 int     DNS_LookUp(const char *target, struct sockaddr_in *addr, char *ipstr,
             size_t ipstr_len);
 
-void    run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr);
+int     run_ping(t_args *args, struct sockaddr_in *addr, char *ipstr);
 
 #endif

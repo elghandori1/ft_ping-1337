@@ -27,12 +27,15 @@ int DNS_LookUp(const char *target, struct sockaddr_in *addr, char *ipstr,
     struct addrinfo hints;
     struct addrinfo *res;
     int ret;
-
+ 
     if (!target || !addr || !ipstr || ipstr_len == 0)
         return -1;
+    
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
-    hints.ai_socktype = 0;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = 0;
+    
     res = NULL;
     ret = getaddrinfo(target, NULL, &hints, &res);
     if (ret != 0 || res == NULL)
@@ -42,6 +45,7 @@ int DNS_LookUp(const char *target, struct sockaddr_in *addr, char *ipstr,
         fprintf(stderr, "ft_ping: unknown host\n");
         return -1;
     }
+    
     if (res->ai_addrlen < sizeof(struct sockaddr_in))
     {
         freeaddrinfo(res);
@@ -55,6 +59,7 @@ int DNS_LookUp(const char *target, struct sockaddr_in *addr, char *ipstr,
         perr_errno("inet_ntop");
         return -1;
     }
+    
     freeaddrinfo(res);
     return 0;
 }
